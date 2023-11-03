@@ -1,8 +1,6 @@
 # DashboardSaludCMV
 
-## Patient Opinion Dashboard for CESFAM: Interactive Visualization
-
-The "Patient Opinion Dashboard" serves as a comprehensive visualization tool designed to streamline the analysis of patient feedback for CESFAM (Centros de Salud Familiar). As a culmination of a multi-step data collection and classification process, this interactive dashboard provides users with a detailed, filterable overview of patient sentiments, health center performances, and demographic distributions.
+The "DashboardSaludCMV" serves as a comprehensive visualization tool designed to streamline the analysis of patient feedback for CESFAM (Centros de Salud Familiar). As a culmination of a multi-step data collection and classification process, this interactive dashboard provides users with a detailed, filterable overview of patient sentiments, health center performances, and demographic distributions.
 
 ### Features
 - **Interactive Filters**: Users can refine their data view using a variety of filters, including keyword search, date ranges, age, gender, health center affiliation (CESFAM), visit frequency, satisfaction levels, recommendations, and sentiment labels.
