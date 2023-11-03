@@ -1,0 +1,9 @@
+# Requeriments
+
+streamlit
+pandas
+plotly
+wordcloud
+matplotlib
+python-dotenv
+pymongo
