@@ -8,6 +8,16 @@ import plotly.graph_objects as go
 import datetime  # For handling date input
 import re  # For regex date processing
 
+import nltk
+nltk.download('punkt')
+
+from wordcloud import WordCloud
+from nltk.tokenize import word_tokenize
+from nltk.util import ngrams
+from collections import Counter
+import matplotlib.pyplot as plt
+import streamlit as st
+
 COLOR_PALETTE = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A']
 
 def main():
@@ -139,7 +149,7 @@ def main():
     else:
 
         st.write(df.drop(columns=['_id'], errors='ignore'))
-        plot_nube_de_palabras(df)
+        plot_nube_de_palabras(df, n=3)
         plot_distribucion_sentimientos(df)
         plot_satisfaccion_y_recomendacion(df)
         plot_distribucion_frecuencia(df)
@@ -167,14 +177,33 @@ def plot_distribucion_sentimientos(df):
     fig = px.pie(df, names='Etiqueta', title='Distribución de Sentimientos', hole=0.3, color_discrete_sequence=COLOR_PALETTE)
     st.plotly_chart(fig, use_container_width=True)
 
-def plot_nube_de_palabras(df):
-    text = ' '.join(df['Razón'])
-    wc = WordCloud(width=800, height=400, max_words=200, background_color='white').generate(text)
+def plot_nube_de_palabras(df, n=2):
+    # Join all the comments into a single text
+    text = ' '.join(df['Razón'].dropna())
     
-    fig, ax = plt.subplots(figsize=(10,7))
+    # Tokenize the text into words
+    words = word_tokenize(text)
+    
+    # Create bigrams or n-grams (you can adjust n for different sizes of phrases)
+    n_grams = ngrams(words, n)
+    
+    # Join the n-grams into phrases
+    phrases = (' '.join(grams) for grams in n_grams)
+    
+    # Create a frequency distribution of the phrases
+    phrase_freq = Counter(phrases)
+    
+    # Generate the word cloud with the specified maximum number of words
+    wc = WordCloud(width=800, height=800, max_words=100, background_color='white').generate_from_frequencies(phrase_freq)
+    
+    # Plot the word cloud using matplotlib
+    fig, ax = plt.subplots(figsize=(10, 7))
     ax.imshow(wc, interpolation='bilinear')
     ax.axis('off')
+    
+    # Display the figure with streamlit
     st.pyplot(fig)
+
 
 def plot_distribucion_edad(df):
     fig = px.histogram(df, x='Edad', nbins=20, title='Distribución de Edad', color_discrete_sequence=COLOR_PALETTE)
