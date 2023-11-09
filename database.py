@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from datetime import timedelta
 import datetime
 import logging
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,54 +32,47 @@ def search_documents(query, column='Todo', start_date=None, end_date=None):
         'Satisfacción': 'satisfaccion',
         'Recomendación': 'recomendacion',
         'Comentario': 'razon',
-        'Fecha': 'date',    # Updated to 'date'
+        'Fecha': 'date',
         'Etiqueta': 'target'
     }
     
-    # Function to try converting query to integer
     def try_int(val):
         try:
             return int(val)
         except ValueError:
-            return val
+            return None
         
     db_column = column_mapping.get(column, column)
-    query = try_int(query) if db_column in ['edad', 'satisfaccion', 'recomendacion', 'target'] else query
-    
-    # Basic filtering
-    if column == 'Todo':
-        regex_query = {"$regex": f"{query}", "$options": 'i'}
-        or_query = [{"genero": regex_query}, {"cesfam": regex_query}, {"frecuencia": regex_query}, {"razon": regex_query}]
-        results = collection.find({"$or": or_query})
-    elif column in ['ID', 'Género', 'Centro de Salud', 'Frecuencia', 'Comentario']:
-        regex_query = {"$regex": f"{query}", "$options": 'i'}
-        results = collection.find({db_column: regex_query})
-    else:
-        results = collection.find({db_column: query})
-    
-     # Date filtering
-    if column == 'Fecha' or (start_date and end_date):
-        if start_date:
-            if isinstance(start_date, str):  # Check if start_date is a string
-                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d')
-            else:  # If it's already a datetime.date object, convert it to datetime
-                start_date = datetime.datetime.combine(start_date, datetime.time())
-                
-        if end_date:
-            if isinstance(end_date, str):  # Check if end_date is a string
-                end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
-            else:  # If it's already a datetime.date object, convert it to datetime and add one day
-                end_date = datetime.datetime.combine(end_date, datetime.time()) + timedelta(days=1)
-        
-        date_query = {'date': {}}
-        if start_date:
-            date_query['date']['$gte'] = start_date
-        if end_date:
-            date_query['date']['$lt'] = end_date
-        
-        results = collection.find(date_query)  # Using find instead of filter
+    query_value = try_int(query) if db_column in ['edad', 'satisfaccion', 'recomendacion', 'target'] else query
 
+    # Construct the base query
+    base_query = {}
+    if query_value is not None:
+        if column != 'Todo':
+            # If the column is specific and the query is not None, use it in the base query
+            base_query[db_column] = query_value
+        else:
+            # If we're searching across all columns
+            regex_query = {"$regex": f"{query}", "$options": 'i'}
+            or_query = [{"genero": regex_query}, {"cesfam": regex_query}, {"frecuencia": regex_query}, {"razon": regex_query}]
+            if isinstance(query_value, int):
+                # If the query can be an integer, add integer fields to the OR query
+                or_query.extend([{"edad": query_value}, {"satisfaccion": query_value}, {"recomendacion": query_value}, {"target": query_value}])
+            base_query["$or"] = or_query
     
+    # Add date filtering to the base query if date range is provided
+    if start_date and end_date:
+        # Convert dates to datetime objects
+        start_date = pd.to_datetime(start_date).to_pydatetime()
+        end_date = pd.to_datetime(end_date).to_pydatetime()
+        
+        # MongoDB expects the end date for the range to be exclusive, hence adding one day
+        end_date = end_date + timedelta(days=1)
+
+        base_query['date'] = {'$gte': start_date, '$lt': end_date}
+
+    # Use the constructed base query to search in the database
+    results = collection.find(base_query)
     return list(results)
 
 @st.cache_data

@@ -24,37 +24,33 @@ def main():
     st.title("Opinión de los Pacientes CESFAM: Visualización Interactiva")
 
 
-    # Sidebar Filters
+  # Sidebar - Filters
     st.sidebar.header("Filtros")
     query = st.sidebar.text_input("Buscar")
     columns = ['Todo', 'Edad', 'Género', 'Centro de Salud', 'Frecuencia', 'Satisfacción', 'Recomendación', 'Comentario', 'Etiqueta']
     selected_column = st.sidebar.selectbox("Buscar en", columns)
 
     use_date_filter = st.sidebar.checkbox("Habilitar filtro de fecha")
-    start_date = end_date = None  # Initialize variables to None
+    start_date = end_date = None
 
+    # Get date range if the date filter is enabled
     if use_date_filter:
         date_range = st.sidebar.date_input(
             "Seleccione rango de fechas",
             (datetime.date.today() - datetime.timedelta(days=7), datetime.date.today())
         )
-        
-        if len(date_range) == 2:  # Check if two dates are returned
+        if len(date_range) == 2:
             start_date, end_date = date_range
-        elif len(date_range) == 1:  # Check if one date is returned
-            start_date = end_date = date_range[0]  # Use the single date as both start and end dates
 
-    # Call search_documents whether date filter is used or not, as long as there is a query
-    if query:
+    # Call search_documents if there is a query, or if the date filter is enabled and dates are selected
+    if query or (use_date_filter and start_date and end_date):
         data = search_documents(query, selected_column, start_date, end_date)
     else:
+        # If there is no query and the date filter is not used, get all documents
         data = get_all_documents()
 
-
-    # data
-
+    # Data processing
     df = pd.DataFrame(data)
-
 
     # Convert columns
     if 'date' in df.columns:
@@ -121,7 +117,7 @@ def main():
     # Satisfaccion Filter
     selected_satisfaccion = 'Todos'
     if 'Satisfacción' in df.columns:
-        satisfaccion_options = ['Todos'] + sorted(df['Satisfacción'].unique().astype(str))
+        satisfaccion_options = ['Todos'] + sorted(df['Satisfacción'].unique())
         selected_satisfaccion = st.sidebar.selectbox('Satisfacción', satisfaccion_options)
     if selected_satisfaccion != 'Todos':
         df = df[df['Satisfacción'] == selected_satisfaccion]
@@ -129,7 +125,7 @@ def main():
     # Recomendacion Filter
     selected_recomendacion = 'Todos'
     if 'Recomendación' in df.columns:
-        recomendacion_options = ['Todos'] + sorted(df['Recomendación'].unique().astype(str))
+        recomendacion_options = ['Todos'] + sorted(df['Recomendación'].unique())
         selected_recomendacion = st.sidebar.selectbox('Recomendación', recomendacion_options)
     if selected_recomendacion != 'Todos':
         df = df[df['Recomendación'] == selected_recomendacion]
