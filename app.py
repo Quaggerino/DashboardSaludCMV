@@ -31,6 +31,7 @@ def main():
     selected_column = st.sidebar.selectbox("Buscar en", columns)
 
     use_date_filter = st.sidebar.checkbox("Habilitar filtro de fecha")
+    start_date = end_date = None  # Initialize variables to None
 
     if use_date_filter:
         date_range = st.sidebar.date_input(
@@ -42,16 +43,11 @@ def main():
             start_date, end_date = date_range
         elif len(date_range) == 1:  # Check if one date is returned
             start_date = end_date = date_range[0]  # Use the single date as both start and end dates
-        else:
-            start_date = end_date = None
 
-        if query or (start_date and end_date):  # Ensure the date filter is used if enabled
-            data = search_documents(query, selected_column, start_date, end_date)
-        else:
-            data = get_all_documents()
+    # Call search_documents whether date filter is used or not, as long as there is a query
+    if query:
+        data = search_documents(query, selected_column, start_date, end_date)
     else:
-        start_date = None
-        end_date = None
         data = get_all_documents()
 
 
