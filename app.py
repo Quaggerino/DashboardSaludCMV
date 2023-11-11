@@ -18,7 +18,13 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import streamlit as st
 
-COLOR_PALETTE = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A']
+COLOR_PALETTE = [
+    '#636EFA',  # Blue
+    '#EF553B',  # Red
+    '#00CC96',  # Green
+    '#AB63FA',  # Purple
+    '#FFA15A'   # Orange
+]
 
 def main():
     st.title("Opinión de los Pacientes CESFAM: Visualización Interactiva")
@@ -139,18 +145,22 @@ def main():
     if df.empty:
         st.write("No hay datos disponibles para los filtros seleccionados. Ajusta los filtros e intenta nuevamente.")
     else:
-
+        
         st.write(df.drop(columns=['_id'], errors='ignore'))
         plot_nube_de_palabras(df, n=3)
+        plot_feedback_por_centro(df)
+        plot_cronologia_feedback(df)
         plot_distribucion_sentimientos(df)
-        plot_satisfaccion_y_recomendacion(df)
+        plot_promedio_etiqueta(df)
+        plot_nps_chart(df)
+        plot_nps_per_cesfam(df)
+        plot_csat_score(df)
+        plot_csat_per_cesfam(df)
         plot_distribucion_frecuencia(df)
         plot_distribucion_edad(df)
         plot_distribucion_genero(df)
-        plot_frecuencia_visitas(df)
-        plot_feedback_por_centro(df)
-        plot_promedio_satisfaccion_recomendacion(df)
-        plot_cronologia_feedback(df)
+        
+        
         plot_grafico_3d(df)
 
 
@@ -166,8 +176,77 @@ def convert_target(target):
     return target_map.get(target, 'Desconocido')
 
 def plot_distribucion_sentimientos(df):
-    fig = px.pie(df, names='Etiqueta', title='Distribución de Sentimientos', hole=0.3, color_discrete_sequence=COLOR_PALETTE)
+    # Define your color mapping here
+    color_map = {
+        'Negativo': '#EF553B',      # Example color for 'Negativo'
+        'Positivo': '#00CC96',    # Example color for 'Positivo'
+        'Irrelevante': '#636EFA',  # Example color for 'Irrelevante'
+        'Sin categorizar': 'white'  # Example color for 'Sin categorizar'
+    }
+
+    # Create the pie chart with the custom color map
+    fig = px.pie(df, names='Etiqueta', title='Distribución de Sentimientos', hole=0.3, color='Etiqueta', color_discrete_map=color_map)
+
+    # Display the chart
     st.plotly_chart(fig, use_container_width=True)
+
+def get_nps_color(score):
+    if score >= 50:
+        return '#00CC96'  # Green
+    elif score >= 0:
+        return '#FFA15A'  # Orange
+    else:
+        return '#EF553B'  # Red
+
+def plot_nps_per_cesfam(df):
+    # Categorize recommendations
+    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], labels=['Detractors', 'Passives', 'Promoters'])
+
+    # Group by CESFAM and NPS Category and count the occurrences
+    nps_counts = df.groupby(['CESFAM', 'NPS Category']).size().reset_index(name='Counts')
+
+    # Calculate NPS for each CESFAM
+    nps_scores = nps_counts.pivot(index='CESFAM', columns='NPS Category', values='Counts').fillna(0)
+    nps_scores['NPS Score'] = (nps_scores['Promoters'] - nps_scores['Detractors']) / nps_scores.sum(axis=1) * 100
+    
+    # Add a column with the color based on the NPS score
+    nps_scores['Color'] = nps_scores['NPS Score'].apply(get_nps_color)
+    
+    # Create the bar chart for NPS per CESFAM with conditional colors
+    fig = px.bar(nps_scores.reset_index(), x='CESFAM', y='NPS Score', title='Net Promoter Score (NPS) por CESFAM',
+                 color='Color', color_discrete_map='identity')
+    
+    # Display the chart
+    st.plotly_chart(fig, use_container_width=True)
+
+def get_csat_color(score):
+    if score >= 50:
+        return '#00CC96'  # Green
+    elif score >= 20:
+        return '#FFA15A'  # Orange
+    else:
+        return '#EF553B'  # Red
+
+def plot_csat_per_cesfam(df):
+    # Filter responses that are 4 or 5 for each CESFAM
+    df['CSAT Category'] = pd.cut(df['Satisfacción'], bins=[0, 3, 4, 5], labels=['Unsatisfied', 'Satisfied', 'Very Satisfied'])
+    csat_counts = df.groupby(['CESFAM', 'CSAT Category']).size().reset_index(name='Counts')
+    
+    # Calculate CSAT for each CESFAM
+    csat_scores = csat_counts.pivot(index='CESFAM', columns='CSAT Category', values='Counts').fillna(0)
+    csat_scores['CSAT Score'] = (csat_scores['Satisfied'] + csat_scores['Very Satisfied']) / csat_scores.sum(axis=1) * 100
+
+    # Add a column with the color based on the CSAT score
+    csat_scores['Color'] = csat_scores['CSAT Score'].apply(get_csat_color)
+    
+    # Create the bar chart for CSAT per CESFAM with conditional colors
+    fig = px.bar(csat_scores.reset_index(), x='CESFAM', y='CSAT Score', title='Customer Satisfaction Score (CSAT) por CESFAM',
+                 color='Color', color_discrete_map='identity')
+    
+    # Display the chart
+    st.plotly_chart(fig, use_container_width=True)
+
+
 
 def plot_nube_de_palabras(df, n=2):
     # Join all the comments into a single text
@@ -197,13 +276,43 @@ def plot_nube_de_palabras(df, n=2):
     st.pyplot(fig)
 
 
-def plot_distribucion_edad(df):
-    fig = px.histogram(df, x='Edad', nbins=20, title='Distribución de Edad', color_discrete_sequence=COLOR_PALETTE)
+def plot_promedio_etiqueta(df):
+    # Define your color mapping here
+    color_map = {
+        'Negativo': '#EF553B',      # Example color for 'Negativo'
+        'Positivo': '#00CC96',    # Example color for 'Positivo'
+        'Irrelevante': '#636EFA',  # Example color for 'Irrelevante'
+        'Sin categorizar': 'white'  # Example color for 'Sin categorizar'
+    }
+
+    # Ensure the 'Etiqueta' column is a category type with the desired order
+    category_order = [ 'Sin categorizar','Irrelevante', 'Negativo', 'Positivo']
+    df['Etiqueta'] = pd.Categorical(df['Etiqueta'], categories=category_order, ordered=True)
+
+    # Group by 'CESFAM' and 'Etiqueta' and count the occurrences
+    etiqueta_counts = df.groupby(['CESFAM', 'Etiqueta']).size().reset_index(name='Cantidad')
+
+    # Create the bar chart with the custom color map
+    fig = px.bar(etiqueta_counts, x='CESFAM', y='Cantidad', color='Etiqueta', title='Distribución de Sentimientos por Centro de Salud',
+                 color_discrete_map=color_map)
+
+    # Display the chart
     st.plotly_chart(fig, use_container_width=True)
 
-def plot_satisfaccion_y_recomendacion(df):
-    fig = px.bar(df, x=['Satisfacción', 'Recomendación'], title='Calificaciones de Satisfacción y Recomendación', color_discrete_sequence=COLOR_PALETTE)
+
+
+def plot_distribucion_edad(df):
+    fig = px.histogram(df, x='Edad', nbins=20, title='Distribución de Edad', 
+                       labels={'count': 'Cantidad'},  # Change Y-axis label to 'Cantidad'
+                       color_discrete_sequence=COLOR_PALETTE)
+    
+    # Update layout for custom axis titles
+    fig.update_layout(
+        yaxis_title='Cantidad',  # Set the Y-axis title
+    )
+    
     st.plotly_chart(fig, use_container_width=True)
+
 
 def plot_distribucion_frecuencia(df):
     fig = px.pie(df, names='Frecuencia', title='Distribución de Frecuencia', hole=0.3, color_discrete_sequence=COLOR_PALETTE)
@@ -215,39 +324,132 @@ def plot_distribucion_genero(df):
     st.plotly_chart(fig, use_container_width=True)
 
 def plot_feedback_por_centro(df):
-    center_counts = df['CESFAM'].value_counts()
-    fig = px.bar(x=center_counts.index, y=center_counts.values, title='Feedback por Centro de Salud', color_discrete_sequence=COLOR_PALETTE)
+    center_counts = df['CESFAM'].value_counts().reset_index()
+    center_counts.columns = ['CESFAM', 'Cantidad']
+
+    # Define your custom color palette
+    CUSTOM_PALETTE = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+
+    # Create the bar chart with the selected color palette
+    fig = px.bar(center_counts, x='CESFAM', y='Cantidad', title='Feedback por Centro de Salud', color='CESFAM',
+                 color_discrete_sequence=CUSTOM_PALETTE)
+
+    # Remove the legend
+    fig.update_layout(showlegend=False)
+
+    # Display the chart
     st.plotly_chart(fig, use_container_width=True)
 
-def plot_frecuencia_visitas(df):
-    frequency_counts = df['Frecuencia'].value_counts()
-    fig = px.pie(names=frequency_counts.index, values=frequency_counts.values, title='Frecuencia de Visitas', color_discrete_sequence=COLOR_PALETTE)
-    st.plotly_chart(fig, use_container_width=True)
-
-def plot_promedio_satisfaccion_recomendacion(df):
-    avg_ratings = df.groupby('CESFAM')[['Satisfacción', 'Recomendación']].mean().reset_index()
-    fig = px.bar(avg_ratings, x='CESFAM', y=['Satisfacción', 'Recomendación'], title='Promedio de Satisfacción y Recomendación por Centro de Salud', color_discrete_sequence=COLOR_PALETTE)
-    st.plotly_chart(fig, use_container_width=True)
 
 def plot_cronologia_feedback(df):
-    feedback_dates = df['Fecha'].value_counts().sort_index()
-    fig = px.line(x=feedback_dates.index, y=feedback_dates.values, title='Cronología de Feedback', color_discrete_sequence=COLOR_PALETTE)
+    # Ensure 'Fecha' is a datetime column
+    df['Fecha'] = pd.to_datetime(df['Fecha'])
+
+    # Now, when you sort, it will be in chronological order
+    feedback_dates = df['Fecha'].dt.date.value_counts().sort_index()
+
+    # Choose a color for the line
+    line_color = '#1f77b4'  # Replace with any color you prefer
+
+    # Create the line chart
+    fig = px.line(feedback_dates, x=feedback_dates.index, y=feedback_dates.values,
+                  title='Cronología de Feedback', line_shape='linear', 
+                  markers=True, color_discrete_sequence=[line_color])
+
+    # Display the chart
     st.plotly_chart(fig, use_container_width=True)
 
+
 def plot_grafico_3d(df):
+    # Create a color scale based on the 'Recomendación' values
+    # Normalize 'Recomendación' to range between the min and max values for the color scale
+    recomendacion_normalized = (df['Recomendación'] - df['Recomendación'].min()) / (df['Recomendación'].max() - df['Recomendación'].min())
+
+    # Create the figure
     fig = go.Figure(data=[go.Scatter3d(
-        x=df['Edad'], 
-        y=df['Satisfacción'], 
-        z=df['Recomendación'], 
+        z=df['Edad'], 
+        x=df['Satisfacción'], 
+        y=df['Recomendación'], 
         mode='markers',
-        marker=dict(size=5),
+        marker=dict(
+            size=5,
+            color=recomendacion_normalized,  # Set color to the normalized 'Recomendación'
+            colorscale='Hot',  # Use the 'Inferno' colorscale
+            colorbar_title='Recomendación'
+        ),
     )])
-    fig.update_layout(title='Edad vs Satisfacción vs Recomendación', scene=dict(
-        xaxis_title='Edad',
-        yaxis_title='Satisfacción',
-        zaxis_title='Recomendación'
-    ))
+
+    # Update the layout with a specified height, e.g., 800 pixels
+    fig.update_layout(
+        title='Edad vs Satisfacción vs Recomendación',
+        scene=dict(
+            zaxis_title='Edad',
+            xaxis_title='Satisfacción',
+            yaxis_title='Recomendación'
+        ),
+        height=800  # Set the height of the figure
+    )
+
+    # Display the chart
     st.plotly_chart(fig, use_container_width=True)
+
+
+def plot_nps_chart(df):
+    # Categorize recommendations
+    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], labels=['Detractors', 'Passives', 'Promoters'])
+
+    # Calculate NPS
+    nps_score = ((df['NPS Category'].value_counts()['Promoters'] - df['NPS Category'].value_counts()['Detractors']) / len(df)) * 100
+
+    # Prepare data for the chart
+    nps_data = df['NPS Category'].value_counts().reset_index()
+    nps_data.columns = ['Category', 'Count']
+
+    # Define color mapping for each category based on your COLOR_PALETTE
+    nps_color_map = {
+        'Detractors': '#EF553B',  # Red
+        'Passives': '#FFA15A',    # Orange
+        'Promoters': '#00CC96',   # Green
+    }
+
+    # Create the hollow pie chart with the custom color map
+    fig = px.pie(nps_data, names='Category', values='Count', title=f'Net Promoter Score (NPS): {nps_score:.2f}', hole=0.4,
+                 color='Category', color_discrete_map=nps_color_map)
+
+    # Add the overall NPS in the middle of the chart
+    fig.update_traces(textinfo='label+percent', textposition='inside')
+    fig.update_layout(annotations=[dict(text=f'NPS<br>{nps_score:.2f}', x=0.5, y=0.5, font_size=20, showarrow=False)])
+
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_csat_score(df):
+    # Assuming 'Satisfacción' is the column with satisfaction scores from 1 to 5
+    # Filter responses that are 4 or 5
+    satisfied_responses = df[df['Satisfacción'] >= 4]
+
+    # Calculate the Top 2 Boxes CSAT Score
+    t2b_csat_score = (len(satisfied_responses) / len(df)) * 100
+    csat_color = get_csat_color(t2b_csat_score)  # Get the color based on the score
+
+    # Prepare data for the chart
+    csat_data = {
+        'Category': ['CSAT Score'],
+        'Score': [t2b_csat_score],
+        'Color': [csat_color]  # Add the color here
+    }
+    csat_df = pd.DataFrame(csat_data)
+
+    # Create the bar chart
+    fig = px.bar(csat_df, x='Category', y='Score', title=f'Customer Satisfaction (CSAT) Score: {t2b_csat_score:.2f}%',
+                 text='Score', range_y=[0, 100], color='Color', color_discrete_map='identity')  # Use color column
+
+    # Update the layout to show the score inside the bar
+    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+
+    # Display the chart
+    st.plotly_chart(fig, use_container_width=True)
+
+  
 
 if __name__ == '__main__':
     main()
