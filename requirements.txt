@@ -8,3 +8,6 @@ matplotlib
 python-dotenv
 pymongo
 nltk
+folium
+branca
+streamlit_folium

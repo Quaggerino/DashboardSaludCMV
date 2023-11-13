@@ -1,4 +1,9 @@
 # Imports and Constants
+import folium
+from streamlit_folium import folium_static
+
+import matplotlib.pyplot as plt
+import matplotlib
 import streamlit as st
 import pandas as pd
 import datetime
@@ -12,6 +17,9 @@ import plotly.graph_objects as go
 from database import get_all_documents, search_documents, get_document_counts
 from wordcloud import WordCloud
 
+from nltk.corpus import stopwords
+nltk.download('stopwords')
+
 import nltk
 nltk.download('punkt')
 
@@ -21,6 +29,124 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # ENG: Color palette for charts
 # ESP: Paleta de colores para los gráficos
 COLOR_PALETTE = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A']
+
+lista_censura = ['sharp','alcalde','tele','concejales', 'concejal','ambulantes',]
+
+cesfam_coords = [
+    {"CESFAM": "CECOSF Porvenir Bajo", "lat": -33.033539, "lon": -71.6498462},
+    {"CESFAM": "CESFAM Placilla", "lat": -33.1123818, "lon": -71.566229},
+    {"CESFAM": "CESFAM Quebrada Verde", "lat": -33.042893, "lon": -71.6467337},
+    {"CESFAM": "CESFAM Cordillera", "lat": -33.0432288, "lon": -71.636744},
+    {"CESFAM": "CESFAM Marcelo Mena", "lat": -33.0489701, "lon": -71.6312418},
+    {"CESFAM": "CESFAM Puertas Negras", "lat": -33.0582224, "lon": -71.6386927},
+    {"CESFAM": "CESFAM Padre Damián", "lat": -33.0578, "lon": -71.5618254},
+    {"CESFAM": "CESFAM Las Cañas", "lat": -33.057986, "lon": -71.6080029},
+    {"CESFAM": "CESFAM Rodelillo", "lat": -33.058831, "lon": -71.5771786},
+    {"CESFAM": "CESFAM Reina Isabel", "lat": -33.0608925, "lon": -71.5924971},
+    {"CESFAM": "CESFAM Placeres", "lat": -33.0457555, "lon": -71.5835698},
+    {"CESFAM": "CESFAM Esperanza", "lat": -33.0334053, "lon": -71.5824393},
+    {"CESFAM": "CESFAM Barón", "lat": -33.0393692, "lon": -71.6008781},
+    {"CESFAM": "CECOSF Laguna Verde", "lat": -33.104275, "lon": -71.667925},
+    {"CESFAM": "CECOSF Juan Pablo II", "lat": -33.0622632, "lon": -71.5631436}
+]
+
+cesfam_df = pd.DataFrame(cesfam_coords)
+
+# Function to calculate CSAT scores
+def calculate_csat(df):
+    # Categorize satisfaction scores
+    df['Categoría CSAT'] = pd.cut(df['Satisfacción'], bins=[0, 3, 4, 5], labels=['Insatisfecho', 'Satisfecho', 'Muy Satisfecho'])
+
+    # Group by CESFAM and count occurrences in each category
+    grouped = df.groupby('CESFAM')['Categoría CSAT'].value_counts().unstack(fill_value=0)
+
+    # Ensure all categories are present
+    categories = ['Insatisfecho', 'Satisfecho', 'Muy Satisfecho']
+    grouped = grouped.reindex(columns=categories, fill_value=0)
+
+    # Calculate CSAT Scores
+    csat_scores = (grouped['Satisfecho'] + grouped['Muy Satisfecho']) / grouped.sum(axis=1) * 100
+
+    # Prepare a DataFrame with CESFAM, CSAT Score, and Color
+    csat_df = pd.DataFrame({
+        'CESFAM': csat_scores.index,
+        'CSAT Score': csat_scores.values,
+        'Color': csat_scores.apply(get_csat_color)
+    })
+    return csat_df
+
+def calculate_nps(df):
+    # Categorize recommendations
+    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], labels=['Detractors', 'Passives', 'Promoters'])
+
+    # Group by CESFAM and calculate NPS for each
+    grouped = df.groupby('CESFAM')['NPS Category'].value_counts().unstack(fill_value=0)
+
+    # Ensure all categories are present
+    categories = ['Detractors', 'Passives', 'Promoters']
+    grouped = grouped.reindex(columns=categories, fill_value=0)
+
+    # Calculate NPS Scores
+    nps_scores = (grouped['Promoters'] - grouped['Detractors']) / grouped.sum(axis=1) * 100
+
+    # Prepare a DataFrame with CESFAM, NPS Score, and Color
+    nps_df = pd.DataFrame({
+        'CESFAM': nps_scores.index,
+        'NPS Score': nps_scores.values,
+        'Color': nps_scores.apply(get_nps_color)
+    })
+    return nps_df
+
+# Mapa CESFAM
+import folium
+from streamlit_folium import folium_static
+from branca.element import IFrame
+
+def plot_cesfam_map(df, cesfam_df):
+    nps_df = calculate_nps(df)
+
+    # Reset the index if needed
+    if nps_df.index.name == 'CESFAM':
+        nps_df = nps_df.reset_index(drop=True)
+    if cesfam_df.index.name == 'CESFAM':
+        cesfam_df = cesfam_df.reset_index(drop=True)
+
+    # Merge the dataframes
+    merged_df = pd.merge(cesfam_df, nps_df, on='CESFAM', how='left').dropna(subset=['lat', 'lon', 'NPS Score'])
+
+    if not merged_df.empty:
+        folium_map = folium.Map(location=[-33.060, -71.619], zoom_start=12)
+
+        # URL to a hospital emoji image (replace with your own URL if needed)
+        hospital_icon_url = 'hospital.png' 
+
+        for _, row in merged_df.iterrows():
+            # Create HTML content for popup with larger font size
+            popup_html = f"<div style='font-size: 12pt;'><b>{row['CESFAM']}</b><br>NPS: {row['NPS Score']:.2f}</div>"
+            popup = folium.Popup(popup_html, max_width=180)
+
+            # Custom icon
+            icon = folium.CustomIcon(hospital_icon_url, icon_size=(32, 32))  # Adjust size as needed
+
+            # Add circle marker for NPS color
+            folium.CircleMarker(
+                location=[row['lat'], row['lon']],
+                radius=16,  # Outer circle size
+                color=row['Color'],
+                fill=True,
+                fill_color=row['Color']
+            ).add_to(folium_map)
+
+            # Add marker with custom icon
+            folium.Marker(
+                location=[row['lat'], row['lon']],
+                icon=icon,
+                popup=popup
+            ).add_to(folium_map)
+
+        folium_static(folium_map)
+    else:
+        st.error("No matching CESFAM coordinates found for the selected data.")
 
 # ENG: Convert date strings to formatted dates
 # ESP: Convierte cadenas de fecha a fechas formateadas
@@ -32,17 +158,21 @@ def convert_date(date):
 # ENG: Convert target values to categorical labels
 # ESP: Convierte valores de target a etiquetas categóricas
 def convert_target(target):
-    target_map = {0: 'Irrelevante', 1: 'Negativo', 2: 'Positivo', 3: 'Sin categorizar'}
+    target_map = {0: 'Irrelevante', 1: 'Negativo', 2: 'Positivo', 3: 'Sin categorizar', 4: 'Error al categorizar'}
     return target_map.get(target, 'Desconocido')
 
 # ENG: Plot sentiment distribution
 # ESP: Trazar la distribución de sentimientos
 def plot_distribucion_sentimientos(df):
+    # Filter out rows where 'Etiqueta' is 'Error al categorizar'
+    df_filtered = df[df['Etiqueta'] != 'Error al categorizar']
+
     color_map = {
         'Negativo': '#EF553B', 'Positivo': '#00CC96',
         'Irrelevante': '#636EFA', 'Sin categorizar': 'white'
     }
-    fig = px.pie(df, names='Etiqueta', title='Distribución de Sentimientos',
+
+    fig = px.pie(df_filtered, names='Etiqueta', title='Distribución de Sentimientos',
                  hole=0.3, color='Etiqueta', color_discrete_map=color_map)
     st.plotly_chart(fig, use_container_width=True)
 
@@ -54,31 +184,16 @@ def get_nps_color(score):
 # ENG: Plot NPS per CESFAM
 # ESP: Trazar NPS por CESFAM
 def plot_nps_per_cesfam(df):
-    # Categorize recommendations
-    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], labels=['Detractors', 'Passives', 'Promoters'])
-
-    # Group by CESFAM and NPS Category and count the occurrences
-    nps_counts = df.groupby(['CESFAM', 'NPS Category']).size().reset_index(name='Counts')
-
-    # Pivot the counts into a DataFrame with CESFAM as index
-    nps_scores = nps_counts.pivot(index='CESFAM', columns='NPS Category', values='Counts').fillna(0)
-
-    # Check for the presence of 'Promoters' and 'Detractors' before calculating NPS Score
-    if 'Promoters' in nps_scores.columns and 'Detractors' in nps_scores.columns:
-        nps_scores['NPS Score'] = (nps_scores['Promoters'] - nps_scores['Detractors']) / nps_scores.sum(axis=1) * 100
-    else:
-        # Handle the case where 'Promoters' or 'Detractors' are missing
-        nps_scores['NPS Score'] = 0  # or any other appropriate handling
-
-    # Determine the color based on NPS score
-    nps_scores['Color'] = nps_scores['NPS Score'].apply(get_nps_color)
+    # Calculate NPS using calculate_nps function
+    nps_df = calculate_nps(df)
 
     # Create the bar chart for NPS per CESFAM with conditional colors
-    fig = px.bar(nps_scores.reset_index(), x='CESFAM', y='NPS Score', title='Net Promoter Score (NPS) por CESFAM',
+    fig = px.bar(nps_df, x='CESFAM', y='NPS Score', title='Net Promoter Score (NPS) por CESFAM',
                  color='Color', color_discrete_map='identity')
     
     # Display the chart
     st.plotly_chart(fig, use_container_width=True)
+
 
 
 # ENG: Determine color based on CSAT score
@@ -88,47 +203,60 @@ def get_csat_color(score):
 
 # ENG: Plot CSAT per CESFAM
 # ESP: Trazar CSAT por CESFAM
+# Function to plot CSAT per CESFAM
 def plot_csat_per_cesfam(df):
-    # Categorize satisfaction scores
-    df['Categoría CSAT'] = pd.cut(df['Satisfacción'], bins=[0, 3, 4, 5], labels=['Insatisfecho', 'Satisfecho', 'Muy Satisfecho'])
-    
-    # Group and count occurrences
-    csat_counts = df.groupby(['CESFAM', 'Categoría CSAT']).size().reset_index(name='Cantidad')
-
-    # Pivot the counts into a DataFrame with CESFAM as index
-    csat_scores = csat_counts.pivot(index='CESFAM', columns='Categoría CSAT', values='Cantidad').fillna(0)
-
-    # Check for the presence of 'Satisfecho' and 'Muy Satisfecho' before calculating CSAT Score
-    if 'Satisfecho' in csat_scores.columns and 'Muy Satisfecho' in csat_scores.columns:
-        csat_scores['CSAT Score'] = (csat_scores['Satisfecho'] + csat_scores['Muy Satisfecho']) / csat_scores.sum(axis=1) * 100
-    else:
-        # Handle the case where either category is missing
-        csat_scores['CSAT Score'] = 0  # or any other appropriate handling
-
-    # Determine the color based on CSAT score
-    csat_scores['Color'] = csat_scores['CSAT Score'].apply(get_csat_color)
+    # Calculate CSAT using calculate_csat function
+    csat_df = calculate_csat(df)
 
     # Create the bar chart for CSAT per CESFAM with conditional colors
-    fig = px.bar(csat_scores.reset_index(), x='CESFAM', y='CSAT Score', title='Customer Satisfaction Score (CSAT) por CESFAM',
+    fig = px.bar(csat_df, x='CESFAM', y='CSAT Score', title='Customer Satisfaction Score (CSAT) por CESFAM',
                  color='Color', color_discrete_map='identity')
-    
+
+    # Set y-axis to include negative values and zero
+    fig.update_layout(yaxis=dict(range=[0, 100]))
+
     # Display the chart
     st.plotly_chart(fig, use_container_width=True)
 
 
+
 # ENG: Plot word cloud from comments
 # ESP: Trazar nube de palabras de comentarios
-def plot_nube_de_palabras(df, n=2):
-    text = ' '.join(df['Razón'].dropna())
+def plot_nube_de_palabras(df, etiquetas=None, exclude_words=None, n=3):
+    # Filter by specific etiquetas/targets if provided
+    if etiquetas:
+        df = df[df['Etiqueta'].isin(etiquetas)]
+
+    # Join all text items into one large string
+    text = ' '.join(df['Razón'].dropna()).lower()
+
+    # Tokenize the text
     words = word_tokenize(text)
-    n_grams = ngrams(words, n)
+
+    # Exclude stopwords and specific words
+    filtered_words = [word for word in words if word not in stopwords.words('spanish')]
+    if exclude_words:
+        filtered_words = [word for word in filtered_words if word not in exclude_words]
+
+    # Generate n-grams
+    n_grams = ngrams(filtered_words, n)
     phrases = (' '.join(grams) for grams in n_grams)
+
+    # Generate frequency distribution
     phrase_freq = Counter(phrases)
-    wc = WordCloud(width=800, height=800, max_words=100, background_color='white').generate_from_frequencies(phrase_freq)
-    fig, ax = plt.subplots(figsize=(10, 7))
-    ax.imshow(wc, interpolation='bilinear')
-    ax.axis('off')
-    st.pyplot(fig)
+
+    # Check if there are phrases to display
+    if phrase_freq:
+        # Create and display the word cloud
+        wc = WordCloud(width=800, height=800, max_words=200, background_color='white').generate_from_frequencies(phrase_freq)
+        fig, ax = plt.subplots(figsize=(10, 7))
+        ax.imshow(wc, interpolation='bilinear')
+        ax.axis('off')
+        st.pyplot(fig)
+    else:
+        # Display a message if there are no phrases
+        st.write("No hay palabras disponibles para mostrar en la nube de palabras.")
+
 
 # ENG: Plot average sentiment by health center
 # ESP: Trazar sentimiento promedio por centro de salud
@@ -188,9 +316,16 @@ def plot_distribucion_genero(df):
 def plot_feedback_por_centro(df):
     center_counts = df['CESFAM'].value_counts().reset_index()
     center_counts.columns = ['CESFAM', 'Cantidad']
-    CUSTOM_PALETTE = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+
+    # Create an Inferno color palette
+    n_colors = len(center_counts)
+    inferno = plt.get_cmap('rainbow')
+    inferno_colors = [inferno(i/n_colors) for i in range(n_colors)]
+    inferno_hex = [matplotlib.colors.to_hex(color) for color in inferno_colors]
+
+    # Create the bar chart
     fig = px.bar(center_counts, x='CESFAM', y='Cantidad', title='Feedback por Centro de Salud',
-                 color_discrete_sequence=CUSTOM_PALETTE)
+                 color='CESFAM', color_discrete_sequence=inferno_hex)
     fig.update_layout(showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
 
@@ -400,10 +535,14 @@ def main():
     # Etiqueta Filter
     selected_etiqueta = 'Todos'
     if 'Etiqueta' in df.columns:
-        etiqueta_options = ['Todos'] + sorted(df['Etiqueta'].unique())
+        # Filter out the specific value 'Error al categorizar' from the options
+        etiqueta_options = ['Todos'] + sorted([etiqueta for etiqueta in df['Etiqueta'].unique() if etiqueta != 'Error al categorizar'])
+
         selected_etiqueta = st.sidebar.selectbox('Etiqueta', etiqueta_options)
+
     if selected_etiqueta != 'Todos':
         df = df[df['Etiqueta'] == selected_etiqueta]
+
 
     # Frecuencia Filter
     selected_frecuencia = 'Todos'
@@ -437,7 +576,9 @@ def main():
         st.write(df.drop(columns=['_id'], errors='ignore'))
         # ENG: Call plotting functions
         # ESP: Llamar a las funciones de trazado
-        plot_nube_de_palabras(df, n=3)
+        plot_nube_de_palabras(df, etiquetas=['Positivo', 'Negativo'], exclude_words=lista_censura, n=3)
+        if not cesfam_df.empty:
+            plot_cesfam_map(df, cesfam_df)
         plot_feedback_por_centro(df)
         plot_cronologia_feedback(df)
         plot_distribucion_sentimientos(df)
