@@ -2,6 +2,8 @@
 import folium
 from streamlit_folium import folium_static
 
+import numpy as np
+
 import matplotlib.pyplot as plt
 import matplotlib
 import streamlit as st
@@ -343,29 +345,29 @@ def plot_cronologia_feedback(df):
 # ENG: Plot a 3D chart for Age vs Satisfaction vs Recommendation
 # ESP: Trazar un gráfico 3D para Edad vs Satisfacción vs Recomendación
 def plot_grafico_3d(df):
-    # ENG: Create a color scale based on 'Recomendación' values
-    # ESP: Crear una escala de colores basada en los valores de 'Recomendación'
-    recomendacion_normalized = (df['Recomendación'] - df['Recomendación'].min()) / (df['Recomendación'].max() - df['Recomendación'].min())
+    # Apply jittering to 'Satisfacción'
+    jitter_amount = 2.0  # Adjust this value as needed
+    df['Satisfacción_jittered'] = df['Satisfacción'] + np.random.uniform(-jitter_amount, jitter_amount, size=len(df))
 
-    # ENG: Create the 3D figure
-    # ESP: Crear la figura 3D
     fig = go.Figure(data=[go.Scatter3d(
         z=df['Edad'],
-        x=df['Satisfacción'],
+        x=df['Satisfacción_jittered'],
         y=df['Recomendación'],
         mode='markers',
         marker=dict(
-            size=5,
-            color=recomendacion_normalized,  # ENG: Set color to the normalized 'Recomendación'
-                                             # ESP: Establecer el color a la 'Recomendación' normalizada
-            colorscale='Hot',  # ENG: Use the 'Hot' colorscale
-                               # ESP: Usar la escala de colores 'Hot'
-            colorbar_title='Recomendación'
+            size=12,
+            color=df['Edad'],
+            colorscale='Oxy',
+            colorbar_title='Edad'
         ),
+        hovertemplate=(
+            "Edad: %{z}<br>" +
+            "Satisfacción: %{text}<br>" +
+            "Recomendación: %{y}<extra></extra>"  # <extra></extra> removes the trace name
+        ),
+        text=df['Satisfacción']  # Use the real 'Satisfacción' values for the hover text
     )])
 
-    # ENG: Update the layout with a specified height, e.g., 800 pixels
-    # ESP: Actualizar el diseño con una altura especificada, por ejemplo, 800 píxeles
     fig.update_layout(
         title='Edad vs Satisfacción vs Recomendación',
         scene=dict(
@@ -373,13 +375,12 @@ def plot_grafico_3d(df):
             xaxis_title='Satisfacción',
             yaxis_title='Recomendación'
         ),
-        height=800  # ENG: Set the height of the figure
-                    # ESP: Establecer la altura de la figura
+        height=800
     )
 
-    # ENG: Display the chart
-    # ESP: Mostrar el gráfico
     st.plotly_chart(fig, use_container_width=True)
+
+
 
 # ENG: Plot the Net Promoter Score (NPS) chart
 # ESP: Trazar el gráfico de Net Promoter Score (NPS)
