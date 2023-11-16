@@ -607,8 +607,14 @@ def main():
     # Recomendacion Filter
     selected_recomendacion = 'Todos'
     if 'Recomendación' in df.columns:
-        recomendacion_options = ['Todos'] + sorted(df['Recomendación'].unique())
+        # Filter out '0' and 0 from the unique values of 'Recomendación'
+        unique_recomendaciones = [recomendacion for recomendacion in sorted(df['Recomendación'].unique()) if recomendacion != '0' and recomendacion != 0]
+        
+        # Add 'Todos' to the options and assign to recomendacion_options
+        recomendacion_options = ['Todos'] + unique_recomendaciones
+
         selected_recomendacion = st.sidebar.selectbox('Recomendación', recomendacion_options)
+
     if selected_recomendacion != 'Todos':
         df = df[df['Recomendación'] == selected_recomendacion]
 
