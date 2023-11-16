@@ -32,7 +32,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # ESP: Paleta de colores para los gráficos
 COLOR_PALETTE = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A']
 
-lista_censura = ['.',',',':','(',')',' ','weon', 'sharp', 'alcalde', 'tele', 'concejales', 'concejal', 'ambulantes', 'boric', 'ctm', 
+lista_censura = ['..','.',',',':','(',')',' ','weon','haitianos','venezonalos','negros','nazi','kast','gobierno','estado','facho','sharp', 'alcalde', 'tele', 'concejales', 'concejal', 'ambulantes', 'boric', 'ctm', 
                  'cecosf porvenir bajo', 'cesfam placilla', 'cesfam quebrada verde', 'cesfam cordillera', 
                  'cesfam marcelo mena', 'cesfam puertas negras', 'cesfam padre damián', 'cesfam las cañas', 
                  'cesfam rodelillo', 'cesfam reina isabel', 'cesfam placeres', 'cesfam esperanza', 
@@ -99,23 +99,27 @@ def calculate_nps(df):
     # Categorize recommendations
     df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], labels=['Detractors', 'Passives', 'Promoters'])
 
-    # Group by CESFAM and calculate NPS for each
-    grouped = df.groupby('CESFAM')['NPS Category'].value_counts().unstack(fill_value=0)
+    # Calculate overall NPS Score for the entire dataset
+    promoter_count = len(df[df['NPS Category'] == 'Promoters'])
+    detractor_count = len(df[df['NPS Category'] == 'Detractors'])
+    total_respondents = len(df)
 
-    # Ensure all categories are present
-    categories = ['Detractors', 'Passives', 'Promoters']
-    grouped = grouped.reindex(columns=categories, fill_value=0)
+    overall_nps = (promoter_count - detractor_count) / total_respondents * 100 if total_respondents > 0 else 0
 
-    # Calculate NPS Scores
-    nps_scores = (grouped['Promoters'] - grouped['Detractors']) / grouped.sum(axis=1) * 100
+    # Apply color based on overall NPS Score
+    nps_color = get_nps_color(overall_nps)
 
     # Prepare a DataFrame with CESFAM, NPS Score, and Color
+    # Since we are calculating overall NPS, the CESFAM column will be redundant.
+    # However, if you still need to keep CESFAMs, we will replicate the overall NPS score across all CESFAMs.
     nps_df = pd.DataFrame({
-        'CESFAM': nps_scores.index,
-        'NPS Score': nps_scores.values,
-        'Color': nps_scores.apply(get_nps_color)
+        'CESFAM': df['CESFAM'].unique(),
+        'NPS Score': [overall_nps] * len(df['CESFAM'].unique()),
+        'Color': [nps_color] * len(df['CESFAM'].unique())
     })
+
     return nps_df
+
 
 # Mapa CESFAM
 import folium
@@ -123,11 +127,22 @@ from streamlit_folium import folium_static
 from branca.element import IFrame
 
 def plot_cesfam_map(df, cesfam_df):
-    nps_df = calculate_nps(df)
+    # Ensure 'Recomendación' column exists
+    if 'Recomendación' not in df.columns:
+        st.error("Column 'Recomendación' not found in the dataset.")
+        return
 
-    # Reset the index if needed
-    if nps_df.index.name == 'CESFAM':
-        nps_df = nps_df.reset_index(drop=True)
+    # Categorize recommendations
+    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], include_lowest=True, right=True, labels=['Detractors', 'Passives', 'Promoters'])
+
+    # Calculate NPS Score for each CESFAM
+    nps_scores = df.groupby('CESFAM').apply(lambda x: (len(x[x['NPS Category'] == 'Promoters']) - len(x[x['NPS Category'] == 'Detractors'])) / len(x) * 100)
+    nps_df = nps_scores.reset_index()
+    nps_df.columns = ['CESFAM', 'NPS Score']
+    nps_df['Color'] = nps_df['NPS Score'].apply(get_nps_color)
+
+
+    # Reset the index if needed for cesfam_df
     if cesfam_df.index.name == 'CESFAM':
         cesfam_df = cesfam_df.reset_index(drop=True)
 
@@ -135,10 +150,10 @@ def plot_cesfam_map(df, cesfam_df):
     merged_df = pd.merge(cesfam_df, nps_df, on='CESFAM', how='left').dropna(subset=['lat', 'lon', 'NPS Score'])
 
     if not merged_df.empty:
-        folium_map = folium.Map(location=[-33.060, -71.619], zoom_start=12)
+        folium_map = folium.Map(location=[-33.065, -71.619], zoom_start=12)
 
-        # URL to a hospital emoji image (replace with your own URL if needed)
-        hospital_icon_url = 'hospital.png' 
+        # URL to a hospital emoji image
+        hospital_icon_url = 'hospital.png'
 
         for _, row in merged_df.iterrows():
             # Create HTML content for popup with larger font size
@@ -146,7 +161,7 @@ def plot_cesfam_map(df, cesfam_df):
             popup = folium.Popup(popup_html, max_width=180)
 
             # Custom icon
-            icon = folium.CustomIcon(hospital_icon_url, icon_size=(32, 32))  # Adjust size as needed
+            icon = folium.CustomIcon(hospital_icon_url, icon_size=(32, 32))
 
             # Add circle marker for NPS color
             folium.CircleMarker(
@@ -164,7 +179,8 @@ def plot_cesfam_map(df, cesfam_df):
                 popup=popup
             ).add_to(folium_map)
 
-        folium_static(folium_map)
+        # Use streamlit's folium_static to display the map
+        st.components.v1.html(folium_map._repr_html_(), width=700, height=420)
     else:
         st.error("No matching CESFAM coordinates found for the selected data.")
 
@@ -199,21 +215,46 @@ def plot_distribucion_sentimientos(df):
 # ENG: Determine color based on NPS score
 # ESP: Determinar color basado en el puntaje NPS
 def get_nps_color(score):
-    return '#00CC96' if score >= 50 else '#FFA15A' if score >= 0 else '#EF553B'
+    if score >= 50:
+        return '#00CC96'  # Green for high scores (Promoters)
+    elif score >= 0:
+        return '#FFA15A'  # Orange for middle scores (Passives)
+    else:
+        return '#EF553B'  # Red for low scores (Detractors)
+
 
 # ENG: Plot NPS per CESFAM
 # ESP: Trazar NPS por CESFAM
 def plot_nps_per_cesfam(df):
-    # Calculate NPS using calculate_nps function
-    nps_df = calculate_nps(df)
+    # Ensure 'Recomendación' column exists
+    if 'Recomendación' not in df.columns:
+        st.error("Column 'Recomendación' not found in the dataset.")
+        return
 
-    # Create the bar chart for NPS per CESFAM with conditional colors
-    fig = px.bar(nps_df, x='CESFAM', y='NPS Score', title='Net Promoter Score (NPS) por CESFAM',
-                 color='Color', color_discrete_map='identity')
-    
+    # Categorize recommendations
+    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], include_lowest=True, right=True, labels=['Detractors', 'Passives', 'Promoters'])
+
+    # Calculate NPS Score for each CESFAM
+    nps_scores = df.groupby('CESFAM').apply(lambda x: (len(x[x['NPS Category'] == 'Promoters']) - len(x[x['NPS Category'] == 'Detractors'])) / len(x) * 100)
+    nps_df = nps_scores.reset_index()
+    nps_df.columns = ['CESFAM', 'NPS Score']
+
+    # Apply get_nps_color to each NPS Score
+    nps_df['Color'] = nps_df['NPS Score'].apply(get_nps_color)
+
+    # Create the bar chart for NPS per CESFAM
+    fig = go.Figure(data=[
+        go.Bar(x=nps_df['CESFAM'], y=nps_df['NPS Score'], marker_color=nps_df['Color'])
+    ])
+
+    fig.update_layout(
+        title='Net Promoter Score (NPS) por CESFAM',
+        xaxis_title='CESFAM',
+        yaxis_title='NPS Score'
+    )
+
     # Display the chart
     st.plotly_chart(fig, use_container_width=True)
-
 
 
 # ENG: Determine color based on CSAT score
@@ -345,17 +386,23 @@ def plot_feedback_por_centro(df):
     center_counts = df['CESFAM'].value_counts().reset_index()
     center_counts.columns = ['CESFAM', 'Cantidad']
 
-    # Create an Inferno color palette
-    n_colors = len(center_counts)
-    inferno = plt.get_cmap('rainbow')
-    inferno_colors = [inferno(i/n_colors) for i in range(n_colors)]
-    inferno_hex = [matplotlib.colors.to_hex(color) for color in inferno_colors]
+    # Create the treemap with a colormap
+    fig = px.treemap(center_counts, path=['CESFAM'], values='Cantidad',
+                     color='Cantidad',  # Apply color based on the 'Cantidad'
+                     color_continuous_scale='Thermal',  # Use Thermal colormap
+                     title='Feedback por Centro de Salud',
+                     hover_data={'Cantidad': ':.0f'})  # Format hover label
 
-    # Create the bar chart
-    fig = px.bar(center_counts, x='CESFAM', y='Cantidad', title='Feedback por Centro de Salud',
-                 color='CESFAM', color_discrete_sequence=inferno_hex)
-    fig.update_layout(showlegend=False)
+    # Adjust the figure size (width and height in pixels)
+    fig.update_layout(width=800, height=900)
+
+    # Hide the color scale legend and customize hover template
+    fig.update_traces(hovertemplate='<b>%{label}</b><br>Cantidad: %{customdata[0]}')
+    fig.update_layout(coloraxis_showscale=False)
+
+    # Display the treemap in Streamlit
     st.plotly_chart(fig, use_container_width=True)
+
 
 # ENG: Plot feedback chronology
 # ESP: Trazar cronología de comentarios
@@ -377,16 +424,18 @@ def plot_cronologia_feedback(df):
 # ESP: Trazar un gráfico 3D para Edad vs Satisfacción vs Recomendación
 def plot_grafico_3d(df):
     # Apply jittering to 'Satisfacción'
-    jitter_amount = 0.9  # Adjust this value as needed
-    df['Satisfacción_jittered'] = df['Satisfacción'] + np.random.uniform(-jitter_amount, jitter_amount, size=len(df))
+    jitter_amount = 0.8  # Maximum jitter amount
+    df['Satisfacción_jittered'] = df['Satisfacción'] + np.random.uniform(0, jitter_amount, size=len(df))
 
+    # Ensure 'Satisfacción_jittered' does not exceed the maximum value (e.g., 5)
+    df['Satisfacción_jittered'] = df['Satisfacción_jittered'].clip(lower=1, upper=5)
     fig = go.Figure(data=[go.Scatter3d(
         z=df['Edad'],
         x=df['Satisfacción_jittered'],
         y=df['Recomendación'],
         mode='markers',
         marker=dict(
-            size=16,
+            size=20,
             color=df['Edad'],
             colorscale='Oxy',
             colorbar_title='Edad'
@@ -402,9 +451,9 @@ def plot_grafico_3d(df):
     fig.update_layout(
         title='Edad vs Satisfacción vs Recomendación',
         scene=dict(
-            zaxis_title='Edad',
-            xaxis_title='Satisfacción',
-            yaxis_title='Recomendación'
+            zaxis=dict(title='Edad'),
+            xaxis=dict(title='Satisfacción', range=[1, 5.9]),  # Set range for Satisfacción
+            yaxis=dict(title='Recomendación', range=[0, 10.9])  # Set range for Recomendación
         ),
         height=800
     )
@@ -416,39 +465,51 @@ def plot_grafico_3d(df):
 # ENG: Plot the Net Promoter Score (NPS) chart
 # ESP: Trazar el gráfico de Net Promoter Score (NPS)
 def plot_nps_chart(df):
-    # ENG: Categorize recommendations
-    # ESP: Categorizar recomendaciones
-    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], labels=['Detractores', 'Pasivos', 'Promotores'])
+    # Ensure 'Recomendación' column exists
+    if 'Recomendación' not in df.columns:
+        st.error("Column 'Recomendación' not found in the dataset.")
+        return
 
-    # ENG: Calculate NPS
-    # ESP: Calcular NPS
-    nps_score = ((df['NPS Category'].value_counts()['Promotores'] - df['NPS Category'].value_counts()['Detractores']) / len(df)) * 100
+    # Categorize recommendations
+    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], include_lowest=True, right=True, labels=['Detractors', 'Passives', 'Promoters'])
 
-    # ENG: Prepare data for the chart
-    # ESP: Preparar datos para el gráfico
+    # Check if NPS Category has valid data
+    if df['NPS Category'].isnull().all():
+        st.error("No valid data for NPS categorization.")
+        return
+
+    # Calculate overall NPS Score
+    promoter_count = len(df[df['NPS Category'] == 'Promoters'])
+    detractor_count = len(df[df['NPS Category'] == 'Detractors'])
+    total_respondents = len(df)
+
+    # Avoid division by zero
+    if total_respondents == 0:
+        st.error("No respondents in the data.")
+        return
+
+    overall_nps = (promoter_count - detractor_count) / total_respondents * 100
+
+    # Prepare data for the pie chart
     nps_data = df['NPS Category'].value_counts().reset_index()
-    nps_data.columns = ['Categoria', 'Cantidad']
+    nps_data.columns = ['Category', 'Count']
 
-    # ENG: Define color mapping for each category
-    # ESP: Definir mapeo de colores para cada categoría
+    # Define color mapping for each category
     nps_color_map = {
-        'Detractores': '#EF553B',  # Red
-        'Pasivos': '#FFA15A',    # Orange
-        'Promotores': '#00CC96',   # Green
+        'Detractors': '#EF553B',  # Red
+        'Passives': '#FFA15A',    # Orange
+        'Promoters': '#00CC96',   # Green
     }
 
-    # ENG: Create the hollow pie chart with the custom color map
-    # ESP: Crear el gráfico circular hueco con el mapa de colores personalizado
-    fig = px.pie(nps_data, names='Categoria', values='Cantidad', title=f'Net Promoter Score (NPS): {nps_score:.2f}', hole=0.4,
-                 color='Categoria', color_discrete_map=nps_color_map)
+    # Create the hollow pie chart with the custom color map
+    fig = px.pie(nps_data, names='Category', values='Count', title=f'Net Promoter Score (NPS): {overall_nps:.2f}', hole=0.4,
+                 color='Category', color_discrete_map=nps_color_map)
 
-    # ENG: Add the overall NPS in the middle of the chart
-    # ESP: Añadir el NPS general en el medio del gráfico
+    # Add the overall NPS in the middle of the chart
     fig.update_traces(textinfo='label+percent', textposition='inside')
-    fig.update_layout(annotations=[dict(text=f'NPS<br>{nps_score:.2f}', x=0.5, y=0.5, font_size=20, showarrow=False)])
+    fig.update_layout(annotations=[dict(text=f'NPS<br>{overall_nps:.2f}', x=0.5, y=0.5, font_size=20, showarrow=False)])
 
-    # ENG: Display the chart
-    # ESP: Mostrar el gráfico
+    # Display the chart
     st.plotly_chart(fig, use_container_width=True)
 
 # ENG: Plot the Customer Satisfaction (CSAT) Score
@@ -617,6 +678,7 @@ def main():
 
     if selected_recomendacion != 'Todos':
         df = df[df['Recomendación'] == selected_recomendacion]
+
 
     # ENG: Display data and plots based on the filters applied
     # ESP: Mostrar datos y gráficos basados en los filtros aplicados
