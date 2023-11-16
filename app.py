@@ -32,7 +32,11 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # ESP: Paleta de colores para los gráficos
 COLOR_PALETTE = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A']
 
-lista_censura = ['sharp','alcalde','tele','concejales', 'concejal','ambulantes',]
+lista_censura = ['weon', 'sharp', 'alcalde', 'tele', 'concejales', 'concejal', 'ambulantes', 'boric', 'ctm', 
+                 'cecosf porvenir bajo', 'cesfam placilla', 'cesfam quebrada verde', 'cesfam cordillera', 
+                 'cesfam marcelo mena', 'cesfam puertas negras', 'cesfam padre damián', 'cesfam las cañas', 
+                 'cesfam rodelillo', 'cesfam reina isabel', 'cesfam placeres', 'cesfam esperanza', 
+                 'cesfam barón', 'cecosf laguna verde', 'cecosf juan pablo ii', 'cecosf','cesfam','CESFAM','CECOSF','Juan','Laguna','Verde','Marcelo','Mena']
 
 cesfam_coords = [
     {"CESFAM": "CECOSF Porvenir Bajo", "lat": -33.033539, "lon": -71.6498462},
@@ -53,6 +57,20 @@ cesfam_coords = [
 ]
 
 cesfam_df = pd.DataFrame(cesfam_coords)
+
+for cesfam in cesfam_coords:
+    lista_censura.append(cesfam['CESFAM'])
+    
+filter_list = set()
+for phrase in lista_censura:
+    words = phrase.split()
+    for word in words:
+        filter_list.add(word)
+
+# Convert the set back to a list
+custom_filter_list = list(filter_list)
+
+lista_censura.extend(custom_filter_list)
 
 # Function to calculate CSAT scores
 def calculate_csat(df):
@@ -295,8 +313,14 @@ def plot_promedio_etiqueta(df):
 # ESP: Trazar distribución de edad
 def plot_distribucion_edad(df):
     fig = px.histogram(df, x='Edad', nbins=20, title='Distribución de Edad',
-                       labels={'count': 'Cantidad'}, color_discrete_sequence=COLOR_PALETTE)
+                       color_discrete_sequence=COLOR_PALETTE)
+
+    # Customize the hover template
+    fig.update_traces(hovertemplate='Edad: %{x}<br>Cantidad: %{y}<extra></extra>')
+
+    # Update layout for y-axis title
     fig.update_layout(yaxis_title='Cantidad')
+
     st.plotly_chart(fig, use_container_width=True)
 
 # ENG: Plot frequency distribution
@@ -308,11 +332,19 @@ def plot_distribucion_frecuencia(df):
 # ENG: Plot gender distribution
 # ESP: Trazar distribución de género
 def plot_distribucion_genero(df):
-    gender_counts = df['Género'].value_counts()
-    fig = px.pie(names=gender_counts.index, values=gender_counts.values, title='Distribución de Género',
-                 color_discrete_sequence=COLOR_PALETTE)
-    st.plotly_chart(fig, use_container_width=True)
+    # Create a DataFrame from value_counts
+    gender_counts = df['Género'].value_counts().reset_index()
+    gender_counts.columns = ['Género', 'Cantidad']  # Rename columns
 
+    fig = px.pie(gender_counts, names='Género', values='Cantidad',
+                 title='Distribución de Género',
+                 color_discrete_sequence=COLOR_PALETTE)
+
+    # Optionally, you can still use update_traces to further customize the hover template
+    # fig.update_traces(hovertemplate="<b>Género:</b> %{label}<br><b>Cantidad:</b> %{value}<extra></extra>")
+
+    st.plotly_chart(fig, use_container_width=True)
+    
 # ENG: Plot feedback by health center
 # ESP: Trazar comentarios por centro de salud
 def plot_feedback_por_centro(df):
@@ -336,17 +368,22 @@ def plot_feedback_por_centro(df):
 def plot_cronologia_feedback(df):
     df['Fecha'] = pd.to_datetime(df['Fecha'])
     feedback_dates = df['Fecha'].dt.date.value_counts().sort_index()
+
     line_color = '#1f77b4'
     fig = px.line(feedback_dates, x=feedback_dates.index, y=feedback_dates.values,
                   title='Cronología de Feedback', line_shape='linear', markers=True,
                   color_discrete_sequence=[line_color])
+
+    # Customize the hover template
+    fig.update_traces(hovertemplate='Fecha: %{x}<br>Cantidad: %{y}<extra></extra>')
+
     st.plotly_chart(fig, use_container_width=True)
 
 # ENG: Plot a 3D chart for Age vs Satisfaction vs Recommendation
 # ESP: Trazar un gráfico 3D para Edad vs Satisfacción vs Recomendación
 def plot_grafico_3d(df):
     # Apply jittering to 'Satisfacción'
-    jitter_amount = 2.0  # Adjust this value as needed
+    jitter_amount = 0.9  # Adjust this value as needed
     df['Satisfacción_jittered'] = df['Satisfacción'] + np.random.uniform(-jitter_amount, jitter_amount, size=len(df))
 
     fig = go.Figure(data=[go.Scatter3d(
@@ -355,7 +392,7 @@ def plot_grafico_3d(df):
         y=df['Recomendación'],
         mode='markers',
         marker=dict(
-            size=12,
+            size=16,
             color=df['Edad'],
             colorscale='Oxy',
             colorbar_title='Edad'
@@ -387,29 +424,29 @@ def plot_grafico_3d(df):
 def plot_nps_chart(df):
     # ENG: Categorize recommendations
     # ESP: Categorizar recomendaciones
-    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], labels=['Detractors', 'Passives', 'Promoters'])
+    df['NPS Category'] = pd.cut(df['Recomendación'], bins=[0, 6, 8, 10], labels=['Detractores', 'Pasivos', 'Promotores'])
 
     # ENG: Calculate NPS
     # ESP: Calcular NPS
-    nps_score = ((df['NPS Category'].value_counts()['Promoters'] - df['NPS Category'].value_counts()['Detractors']) / len(df)) * 100
+    nps_score = ((df['NPS Category'].value_counts()['Promotores'] - df['NPS Category'].value_counts()['Detractores']) / len(df)) * 100
 
     # ENG: Prepare data for the chart
     # ESP: Preparar datos para el gráfico
     nps_data = df['NPS Category'].value_counts().reset_index()
-    nps_data.columns = ['Category', 'Count']
+    nps_data.columns = ['Categoria', 'Cantidad']
 
     # ENG: Define color mapping for each category
     # ESP: Definir mapeo de colores para cada categoría
     nps_color_map = {
-        'Detractors': '#EF553B',  # Red
-        'Passives': '#FFA15A',    # Orange
-        'Promoters': '#00CC96',   # Green
+        'Detractores': '#EF553B',  # Red
+        'Pasivos': '#FFA15A',    # Orange
+        'Promotores': '#00CC96',   # Green
     }
 
     # ENG: Create the hollow pie chart with the custom color map
     # ESP: Crear el gráfico circular hueco con el mapa de colores personalizado
-    fig = px.pie(nps_data, names='Category', values='Count', title=f'Net Promoter Score (NPS): {nps_score:.2f}', hole=0.4,
-                 color='Category', color_discrete_map=nps_color_map)
+    fig = px.pie(nps_data, names='Categoria', values='Cantidad', title=f'Net Promoter Score (NPS): {nps_score:.2f}', hole=0.4,
+                 color='Categoria', color_discrete_map=nps_color_map)
 
     # ENG: Add the overall NPS in the middle of the chart
     # ESP: Añadir el NPS general en el medio del gráfico
@@ -437,12 +474,12 @@ def plot_csat_score(df):
 
     # ENG: Prepare data for the chart
     # ESP: Preparar datos para el gráfico
-    csat_data = {'Category': ['CSAT Score'], 'Score': [t2b_csat_score], 'Color': [csat_color]}
+    csat_data = {'Categoria': ['CSAT Score'], 'Score': [t2b_csat_score], 'Color': [csat_color]}
     csat_df = pd.DataFrame(csat_data)
 
     # ENG: Create the bar chart
     # ESP: Crear el gráfico de barras
-    fig = px.bar(csat_df, x='Category', y='Score', title=f'Customer Satisfaction (CSAT) Score: {t2b_csat_score:.2f}%',
+    fig = px.bar(csat_df, x='Categoria', y='Score', title=f'Customer Satisfaction (CSAT) Score: {t2b_csat_score:.2f}%',
                  text='Score', range_y=[0, 100], color='Color', color_discrete_map='identity')
 
     # ENG: Update the layout to show the score inside the bar
@@ -460,6 +497,18 @@ def main():
     # ESP: Establecer el título de la página Streamlit
     st.title("Opinión de los Pacientes CESFAM: Visualización Interactiva")
 
+
+    # Button to refresh data
+    # Sidebar refresh button
+    # Inject custom CSS to style the sidebar button
+    if st.sidebar.button('Actualizar Datos', use_container_width=True):
+        # Clear the cache of the functions
+        get_all_documents.clear()
+        search_documents.clear()
+        # Reload the data
+        st.experimental_rerun()
+    
+            
     # Sidebar - Filters
     # ENG: Create a header for filters in the sidebar
     # ESP: Crear un encabezado para los filtros en la barra lateral
