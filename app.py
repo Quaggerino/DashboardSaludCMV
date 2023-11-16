@@ -32,7 +32,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # ESP: Paleta de colores para los gráficos
 COLOR_PALETTE = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A']
 
-lista_censura = ['weon', 'sharp', 'alcalde', 'tele', 'concejales', 'concejal', 'ambulantes', 'boric', 'ctm', 
+lista_censura = ['.',',',':','(',')',' ','weon', 'sharp', 'alcalde', 'tele', 'concejales', 'concejal', 'ambulantes', 'boric', 'ctm', 
                  'cecosf porvenir bajo', 'cesfam placilla', 'cesfam quebrada verde', 'cesfam cordillera', 
                  'cesfam marcelo mena', 'cesfam puertas negras', 'cesfam padre damián', 'cesfam las cañas', 
                  'cesfam rodelillo', 'cesfam reina isabel', 'cesfam placeres', 'cesfam esperanza', 
@@ -242,41 +242,35 @@ def plot_csat_per_cesfam(df):
 
 # ENG: Plot word cloud from comments
 # ESP: Trazar nube de palabras de comentarios
-def plot_nube_de_palabras(df, etiquetas=None, exclude_words=None, n=3):
-    # Filter by specific etiquetas/targets if provided
+def plot_nube_de_palabras(df, etiquetas=None, exclude_words=None, n=4):
     if etiquetas:
         df = df[df['Etiqueta'].isin(etiquetas)]
 
-    # Join all text items into one large string
     text = ' '.join(df['Razón'].dropna()).lower()
-
-    # Tokenize the text
     words = word_tokenize(text)
 
-    # Exclude stopwords and specific words
-    filtered_words = [word for word in words if word not in stopwords.words('spanish')]
+    # Get and modify the stopwords list
+    spanish_stopwords = stopwords.words('spanish')
+    if 'no' in spanish_stopwords:
+        spanish_stopwords.remove('no')
+
+    # Filter words
+    filtered_words = [word for word in words if word not in spanish_stopwords]
     if exclude_words:
         filtered_words = [word for word in filtered_words if word not in exclude_words]
 
-    # Generate n-grams
     n_grams = ngrams(filtered_words, n)
     phrases = (' '.join(grams) for grams in n_grams)
-
-    # Generate frequency distribution
     phrase_freq = Counter(phrases)
 
-    # Check if there are phrases to display
     if phrase_freq:
-        # Create and display the word cloud
-        wc = WordCloud(width=800, height=800, max_words=200, background_color='white').generate_from_frequencies(phrase_freq)
+        wc = WordCloud(width=800, height=800, max_words=100, background_color='white').generate_from_frequencies(phrase_freq)
         fig, ax = plt.subplots(figsize=(10, 7))
         ax.imshow(wc, interpolation='bilinear')
         ax.axis('off')
         st.pyplot(fig)
     else:
-        # Display a message if there are no phrases
         st.write("No hay palabras disponibles para mostrar en la nube de palabras.")
-
 
 # ENG: Plot average sentiment by health center
 # ESP: Trazar sentimiento promedio por centro de salud
@@ -626,7 +620,8 @@ def main():
         st.write(df.drop(columns=['_id'], errors='ignore'))
         # ENG: Call plotting functions
         # ESP: Llamar a las funciones de trazado
-        plot_nube_de_palabras(df, etiquetas=['Positivo', 'Negativo'], exclude_words=lista_censura, n=3)
+        n_value = st.slider("Ajustar Nivel de Detalle de la Nube de Palabras:", 1, 4, 4)
+        plot_nube_de_palabras(df, etiquetas=['Positivo', 'Negativo'], exclude_words=lista_censura, n=n_value)
         if not cesfam_df.empty:
             plot_cesfam_map(df, cesfam_df)
         plot_feedback_por_centro(df)
