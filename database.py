@@ -50,7 +50,10 @@ def search_documents(query, column='Todo', start_date=None, end_date=None):
     base_query = {}
     if query_value is not None:
         if column != 'Todo':
-            base_query[db_column] = query_value
+            if isinstance(query_value, str):
+                base_query[db_column] = {"$regex": query_value, "$options": "i"}
+            else:
+                base_query[db_column] = query_value
         else:
             regex_query = {"$regex": f"{query}", "$options": 'i'}
             or_query = [{"genero": regex_query}, {"cesfam": regex_query}, {"frecuencia": regex_query}, {"razon": regex_query}]

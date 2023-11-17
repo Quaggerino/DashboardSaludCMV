@@ -3,9 +3,8 @@ import folium
 from streamlit_folium import folium_static
 
 import numpy as np
-
+import csv
 import matplotlib.pyplot as plt
-import matplotlib
 import streamlit as st
 import pandas as pd
 import datetime
@@ -32,11 +31,14 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # ESP: Paleta de colores para los gráficos
 COLOR_PALETTE = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A']
 
-lista_censura = ['..','.',',',':','(',')',' ','weon','haitianos','venezonalos','negros','nazi','kast','gobierno','estado','facho','sharp', 'alcalde', 'tele', 'concejales', 'concejal', 'ambulantes', 'boric', 'ctm', 
-                 'cecosf porvenir bajo', 'cesfam placilla', 'cesfam quebrada verde', 'cesfam cordillera', 
-                 'cesfam marcelo mena', 'cesfam puertas negras', 'cesfam padre damián', 'cesfam las cañas', 
-                 'cesfam rodelillo', 'cesfam reina isabel', 'cesfam placeres', 'cesfam esperanza', 
-                 'cesfam barón', 'cecosf laguna verde', 'cecosf juan pablo ii', 'cecosf','cesfam','CESFAM','CECOSF','Juan','Laguna','Verde','Marcelo','Mena']
+lista_censura = []
+
+with open('lista_censura.csv', 'r', encoding='utf-8') as file:
+    reader = csv.reader(file)
+
+    for row in reader:
+        lista_censura.append(row[0])
+
 
 cesfam_coords = [
     {"CESFAM": "CECOSF Porvenir Bajo", "lat": -33.033539, "lon": -71.6498462},
@@ -58,19 +60,7 @@ cesfam_coords = [
 
 cesfam_df = pd.DataFrame(cesfam_coords)
 
-for cesfam in cesfam_coords:
-    lista_censura.append(cesfam['CESFAM'])
-    
-filter_list = set()
-for phrase in lista_censura:
-    words = phrase.split()
-    for word in words:
-        filter_list.add(word)
 
-# Convert the set back to a list
-custom_filter_list = list(filter_list)
-
-lista_censura.extend(custom_filter_list)
 
 # Function to calculate CSAT scores
 def calculate_csat(df):
@@ -571,7 +561,7 @@ def main():
     query = st.sidebar.text_input("Buscar")
     columns = ['Todo', 'Edad', 'Género', 'Centro de Salud', 'Frecuencia', 'Satisfacción', 'Recomendación', 'Comentario', 'Etiqueta']
     selected_column = st.sidebar.selectbox("Buscar en", columns)
-
+    
     # ENG: Enable a date filter
     # ESP: Habilitar un filtro de fecha
     use_date_filter = st.sidebar.checkbox("Habilitar filtro de fecha")
@@ -615,14 +605,6 @@ def main():
 
     # ENG: Apply filters based on user selection
     # ESP: Aplicar filtros basados en la selección del usuario
-    
-    # Genero Filter
-    selected_gender = 'Todos'
-    if 'Genero' in df.columns:
-        gender_options = ['Todos'] + sorted(df['Genero'].unique())
-        selected_gender = st.sidebar.selectbox('Género', gender_options)
-    if selected_gender != 'Todos':
-        df = df[df['Genero'] == selected_gender]
 
     # Edad Range Filter
     if 'Edad' in df.columns:
@@ -648,6 +630,13 @@ def main():
     if selected_etiqueta != 'Todos':
         df = df[df['Etiqueta'] == selected_etiqueta]
 
+    # Genero Filter
+    selected_gender = 'Todos'
+    if 'Género' in df.columns:
+        gender_options = ['Todos'] + sorted(df['Género'].unique())
+        selected_gender = st.sidebar.selectbox('Género', gender_options)
+    if selected_gender != 'Todos':
+        df = df[df['Género'] == selected_gender]
 
     # Frecuencia Filter
     selected_frecuencia = 'Todos'
